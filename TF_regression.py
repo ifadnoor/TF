@@ -51,13 +51,13 @@ dataset.tail()
 
 # ## **Clean the data**
 
-#Unkown values in the dataset:
+# Unkown values in the dataset:
 dataset.isna().sum()
 
-#Drop na rows
+# Drop na rows
 dataset = dataset.dropna()
 
-#The "Origin" column is categorical, not numeric. So the next step is to one-hot encode the values in the column with pd.get_dummies
+# The "Origin" column is categorical, not numeric. So the next step is to one-hot encode the values in the column with pd.get_dummies
 dataset['Origin'] = dataset['Origin'].map({1: 'USA', 2: 'Europe', 3: 'Japan'})
 dataset = pd.get_dummies(dataset, columns=['Origin'], prefix='', prefix_sep='')
 dataset.tail()
@@ -75,7 +75,7 @@ test_dataset = dataset.drop(train_dataset.index)
 
 sns.pairplot(train_dataset[['MPG', 'Cylinders', 'Displacement', 'Weight']], diag_kind='kde')
 
-#Check summary stats. Note how each feature covers a very different range
+# Check summary stats. Note how each feature covers a very different range
 train_dataset.describe().transpose()
 
 # ## **Split features from labels**
@@ -100,7 +100,7 @@ test_labels = test_features.pop('MPG')
 
 # ## **The Normalization Layer**
 
-#Normalized layer
+# Normalized layer
 normalizer = tf.keras.layers.experimental.preprocessing.Normalization(axis=-1)
 normalizer.adapt(np.array(train_features))
 
@@ -114,7 +114,7 @@ with np.printoptions(precision=4, suppress=True):
     print("Normalized:", normalizer(first).numpy())
 # -
 
-# ## **Linear Regression**
+# ## **Linear Regression with single input**
 # Linear regression with one variable
 #
 # Begin with a single-variable linear regression to predict 'MPG' from 'Horsepower'.
@@ -130,14 +130,14 @@ with np.printoptions(precision=4, suppress=True):
 # The number of inputs can either be set by the input_shape argument, or automatically when the model is run for the first time.
 
 # +
-#Create a NumPy array made of the 'Horsepower' features. Then normalize and fit its state to the horsepower data
+# Create a NumPy array made of the 'Horsepower' features. Then normalize and fit its state to the horsepower data
 horsepower = np.array(train_features['Horsepower'])
 
 horsepower_normalizer = layers.experimental.preprocessing.Normalization(input_shape=[1,], axis=None)
 horsepower_normalizer.adapt(horsepower)
 
 # +
-#Keras Sequential model:
+# Keras Sequential model:
 horsepower_model = tf.keras.Sequential([
     horsepower_normalizer,
     layers.Dense(units=1)
@@ -160,7 +160,6 @@ horsepower_model.compile(
 )
 
 # Having configured the training, use Keras Model.fit to execute the training for 100 epochs
-# %%time
 history = horsepower_model.fit(
     train_features['Horsepower'],
     train_labels,
@@ -188,6 +187,92 @@ def plot_loss(history):
     plt.grid(True)
 
 plot_loss(history)
+
+# +
+# Collect the results on the test set for later
+test_results = {}
+
+test_results['horsepower_model'] = horsepower_model.evaluate(
+    test_features['Horsepower'],
+    test_labels, verbose=0)
+# -
+
+# Since this is a single variable regression, it's easy to view the model's predictions as a function of the input
+x = tf.linspace(0.0, 250, 251)
+y = horsepower_model.predict(x)
+
+
+# +
+def plot_horsepower(x, y):
+    plt.scatter(train_features['Horsepower'], train_labels, label='Data')
+    plt.plot(x, y, color='k', label='Predictions')
+    plt.xlabel('Horsepower')
+    plt.ylabel('MPG')
+    plt.legend()
+
+plot_horsepower(x,y)
+# -
+
+# ## **Linear Regression with multiple inputs**
+# You can use an almost identical setup to make predictions based on multiple inputs. This model still does the same ***y=mx+b*** except that ***m*** is a matrix and ***b*** is a vector.
+#
+# Create a two-step Keras Sequential model again with the first layer being normalizer (tf.keras.layers.Normalization(axis=-1)) you defined earlier and adapted to the whole dataset:
+
+linear_model = tf.keras.Sequential([
+    normalizer,
+    layers.Dense(units=1)
+])
+
+# When you call Model.predict on a batch of inputs, it produces units=1 outputs for each example
+linear_model.predict(train_features[:10])
+
+# When you call the model, its weight matrices will be built---check that the kernel weighs (the m in y=mx+b) have a shape of (9, 1)
+linear_model.layers[1].kernel
+
+# +
+# Configure the model Keras Model.compile and train with Model.fit for 100 epochs
+linear_model.compile(
+    optimizer = tf.keras.optimizers.Adam(learning_rate=0.1),
+    loss='mean_absolute_error'
+)
+
+linear_model.summary()
+# -
+
+history = linear_model.fit(
+    train_features,
+    train_labels,
+    epochs=100,
+    # Suppress logging
+    verbose=0,
+    # calculate validation results on 20% of training data
+    validation_split=0.2
+)
+
+# Using all the inputs in this regression model achieves a much lower training and validation error than the horsepower_model, which had only one input
+plot_loss(history)
+
+# Collect the results on the test set for later
+test_results['linear_model'] = linear_model.evaluate(test_features, test_labels, verbose=0)
+
+# ## **Regression with a deep neural network (DNN)**
+
+# In the previous section, you implemented two linear models for single and multiple inputs.
+#
+# Here, you will implement single-input and multiple-input DNN models.
+#
+# The code is basically the same except the model is expanded to include some "hidden" non-linear layers. The name "hidden" here just means not directly connected to the inputs or outputs.
+#
+# These models will contain a few more layers than the linear model:
+#
+# * The normalization layer, as before (with horsepower_normalizer for a single-input model and normalizer for a multiple-input model).
+#
+# * Two hidden, non-linear, Dense layers with the ReLU (relu) activation function nonlinearity.
+#
+# * A linear Dense single-output layer.
+
+# +
+# Both models will use the same training procedure so the compile method is included in the build_and_compile_model function below.
 # -
 
 
